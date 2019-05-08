@@ -82,14 +82,14 @@ TTS_down <- 2000
 binsize <- 100
 col <- colorRampPalette(brewer.pal(9,"YlOrRd"))
 
-# load file
 cat("-----------preparing file-----------", "\n")
+# load file
 for (name in HM_list) {
     assign(name, PrepareChipseq(rtracklayer::import.bed(paste0(data_path, "/", name, "/", name, "_chr1.bed"))))
 }
 
-# load gemone info
 cat("-----------preparing anno-----------", "\n")
+# load gemone info
 anno_temp <- readr::read_delim(anno_path, delim = ",", col_names = TRUE)
 
 # anno arrange
@@ -170,7 +170,7 @@ for (name in HM_list) {
 }
 
 cat("-------------overlapping-------------", "\n")
-# positive
+# positive strand
 for (i in 1:length(HM_list)) {
     out_df_temp <- data.frame(t(matrix(eval(parse(text = HM_po_temp_list[i]))$score, nrow = 81)))
     out_df_temp <- cbind(HM = rep(HM_list[i], nrow(out_df_temp)), out_df_temp)
@@ -181,7 +181,7 @@ for (i in 1:length(HM_list)) {
         out_df <- rbind(out_df, out_df_temp)
     } 
 }
-# negative
+# negative strand
 for (i in 1:length(HM_list)) {
     out_df_temp <- data.frame(t(matrix(eval(parse(text = HM_ne_temp_list[i]))$score, nrow = 81)))
     out_df_temp <- out_df_temp[,ncol(out_df_temp):1]
