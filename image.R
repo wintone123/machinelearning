@@ -30,7 +30,7 @@ max_legend <- function(a) {
 # }
 
 imaging_par <- function(gene_name) {
-    temp_mt <- as.matrix(filter(imput, gene == gene_name)[,3:83])
+    temp_mt <- as.matrix(filter(imput, gene == gene_name)[1:4,3:83])
     if (sum(temp_mt) != 0) {
         pheatmap(temp_mt, cluster_rows = FALSE, cluster_cols = FALSE,
                  show_rownames = FALSE, show_colnames = FALSE, 
@@ -41,8 +41,8 @@ imaging_par <- function(gene_name) {
 }
 
 # parameter
-path_in <- "/mnt/c/machinelearning/test1/output.csv"
-path_out <- "/mnt/c/machinelearning/test1/gene_image"
+path_in <- "/mnt/c/machinelearning/test2/output.csv"
+path_out <- "/mnt/c/machinelearning/test2/gene_image"
 col <- colorRampPalette(brewer.pal(9,"YlOrRd"))
 
 # load file
@@ -53,8 +53,10 @@ breaks <- seq(0, max_legend(max(imput_mt)))
 
 # process
 cat("--------------processing--------------", "\n")
+if (dir.exists(path_out) == FALSE) {
+    dir.create(path_out)
+}
 cl <- makeForkCluster(2)
-clusterExport(cl, c("col", "breaks", "imput"))
 parLapply(cl, unique(imput$gene), imaging_par)
 stopCluster(cl)
 # for (gene_name in unique(imput$gene)) {
