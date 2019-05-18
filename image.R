@@ -41,8 +41,8 @@ imaging_par <- function(gene_name) {
 }
 
 # parameter
-path_in <- "/mnt/c/machinelearning/test2/output.csv"
-path_out <- "/mnt/c/machinelearning/test2/gene_image"
+path_in <- "/mnt/c/machinelearning/test3/output.csv"
+path_out <- "/mnt/c/machinelearning/test3/gene_image"
 col <- colorRampPalette(brewer.pal(9,"YlOrRd"))
 
 # load file

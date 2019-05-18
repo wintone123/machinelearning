@@ -11,19 +11,12 @@ PrepareChipseq <- function(reads){
     return(trim(reads_extended))
 }
 
-# BinChipseq <- function(reads, input, bins){
-#     test <- countOverlaps(bins, reads) / length(reads) * 1000000
-#     input <- countOverlaps(bins, input) / length(inpput) * 1000000
-#     mcols(bins)$score = ifelse(test > input, test - input, 0)
-#     return(bins)
-# }
-
 BinChipseq <- function(reads, bins){
     mcols(bins)$score = countOverlaps(bins, reads) / length(reads) * 1000000
     return(bins)
 }
 
-TileSequence <- function(seqname, start, end, tilewidth){
+TileSequence <- function(start, end, tilewidth){
     start_list <- seq(start, end, by = tilewidth)
     end_list <- start_list + tilewidth -1
     if (start_list[length(start_list)] == end) {
@@ -33,13 +26,9 @@ TileSequence <- function(seqname, start, end, tilewidth){
     } else {
         end_list[length(end_list)] <- end
     }
-    GRanges_temp <- GRanges(seqnames = Rle(seqname),
-                            ranges = IRanges(start = start_list, end = end_list),
-                            strand = Rle("*"))
-    return(GRanges_temp)
+    out <- list("start" = start_list, "end" = end_list)
+    return(out)
 }
-
-
 
 binning <- function(chrom) {
     # load file
@@ -53,63 +42,32 @@ binning <- function(chrom) {
     # anno arrange
     anno <- filter(anno_temp, gene_biotype %in% c("protein_coding") & abs(start - end) > TSS_down + TTS_up)
     anno_po <- filter(anno, strand == "+")
-    anno_po$TSS_up <- anno_po$start - TSS_up
-    anno_po$TSS_down <- anno_po$start + TSS_down
-    anno_po$TTS_up <- anno_po$end - TTS_up
-    anno_po$TTS_down <- anno_po$end + TTS_down
     gene_po_list <- unique(anno_po$gene_name)
     anno_ne <- filter(anno, strand == "-")
-    anno_ne$TSS_up <- anno_ne$end + TSS_up
-    anno_ne$TSS_down <- anno_ne$end - TSS_down
-    anno_ne$TTS_up <- anno_ne$start + TTS_up
-    anno_ne$TTS_down <- anno_ne$start - TTS_down
     gene_ne_list <- unique(anno_ne$gene_name)
 
     # positive strand
     for (i in 1:length(gene_po_list)) {
         gene <- anno_po[anno_po$gene_name == gene_po_list[i],][1,]
-        tss_bins <- TileSequence(chrom, gene$TSS_up, gene$TSS_down, binsize)
-        tts_bins <- TileSequence(chrom, gene$TTS_up, gene$TTS_down, binsize)
-        inter_bins <- GRanges(seqnames = Rle(chrom),
-                              ranges = IRanges(start = gene$TSS_down +1, end = gene$TTS_up - 1),
-                              strand = Rle("*"))
-        gene_bins <- Reduce("c", list(tss_bins, inter_bins, tts_bins))
-        gene_bins$name <- rep(gene_po_list[i], length(gene_bins))
+        up_list <- TileSequence(gene$start-TSS_up, gene$start+TSS_down, binsize)
+        down_list <- TileSequence(gene$end-TTS_up, gene$end+TTS_down, binsize)
+        po_temp_df <- data.frame(start = c(up_list$start, gene$start, down_list$start),
+                                 end = c(up_list$end, gene$end, down_list$end))
         if (i == 1) {
-            out_po_bins <- gene_bins
+            out_po_df <- po_temp_df
         } else {
-            out_po_bins <- Reduce("c", list(out_po_bins, gene_bins))
+            out_po_df <- rbind(out_po_df, po_temp_df)
         }
     }
-    # negative strand
-    for (i in 1:length(gene_ne_list)) {
-        gene <- anno_ne[anno_ne$gene_name == gene_ne_list[i],][1,]
-        tss_bins <- TileSequence(chrom, gene$TSS_down, gene$TSS_up, binsize)
-        tts_bins <- TileSequence(chrom, gene$TTS_down, gene$TTS_up, binsize)
-        inter_bins <- GRanges(seqnames = Rle(chrom),
-                              ranges = IRanges(start = gene$TTS_up + 1, end = gene$TSS_down - 1),
-                              strand = Rle("*"))
-        gene_bins <- Reduce("c", list(tts_bins, inter_bins, tss_bins))
-        gene_bins$name <- rep(gene_ne_list[i], length(gene_bins))
-        if (i == 1) {
-            out_ne_bins <- gene_bins
-        } else {
-            out_ne_bins <- Reduce("c", list(out_ne_bins, gene_bins))
-        }
-    }
-
+    out_po_bins <- GRanges(seqnames = Rle(chrom),
+                           ranges = IRanges(start = out_po_df$start, end = out_po_df$end),
+                           strand = Rle("*"))
     HM_po_temp_list <- paste0(HM_list, "_po_temp")
     for (name in HM_list) {
         assign(paste0(name, "_po_temp"), BinChipseq(eval(parse(text = name)), out_po_bins))
     }
-    HM_ne_temp_list <- paste0(HM_list, "_ne_temp")
-    for (name in HM_list) {
-        assign(paste0(name, "_ne_temp"), BinChipseq(eval(parse(text = name)), out_ne_bins))
-    }
-
-    # positive strand
     for (i in 1:length(HM_list)) {
-        out_df_temp <- data.frame(t(matrix(eval(parse(text = HM_po_temp_list[i]))$score, nrow = 81)))
+        out_df_temp <- data.frame(t(matrix(eval(parse(text = HM_po_temp_list[i]))$score, nrow = binnum)))
         out_df_temp <- cbind(HM = rep(HM_list[i], nrow(out_df_temp)), out_df_temp)
         out_df_temp <- cbind(gene = gene_po_list, out_df_temp)
         if (i == 1) {
@@ -118,9 +76,29 @@ binning <- function(chrom) {
             out_df <- rbind(out_df, out_df_temp)
         } 
     }
-    negative strand
+
+    # negative strand
+    for (i in 1:length(gene_ne_list)) {
+        gene <- anno_ne[anno_ne$gene_name == gene_ne_list[i],][1,]
+        up_list <- TileSequence(gene$start-TTS_up, gene$start+TTS_down, binsize)
+        down_list <- TileSequence(gene$end-TSS_up, gene$end+TSS_down, binsize)
+        ne_temp_df <- data.frame(start = c(down_list$start, gene$start, up_list$start),
+                                 end = c(down_list$end, gene$end, up_list$end))
+        if (i == 1) {
+            out_ne_df <- ne_temp_df
+        } else {
+            out_ne_df <- rbind(out_ne_df, ne_temp_df)
+        } 
+    }
+    out_ne_bins <- GRanges(seqnames = Rle(chrom),
+                           ranges = IRanges(start = out_ne_df$start, end = out_ne_df$end),
+                           strand = Rle("*"))
+    HM_ne_temp_list <- paste0(HM_list, "_ne_temp")
+    for (name in HM_list) {
+        assign(paste0(name, "_ne_temp"), BinChipseq(eval(parse(text = name)), out_ne_bins))
+    }
     for (i in 1:length(HM_list)) {
-        out_df_temp <- data.frame(t(matrix(eval(parse(text = HM_ne_temp_list[i]))$score, nrow = 81)))
+        out_df_temp <- data.frame(t(matrix(eval(parse(text = HM_ne_temp_list[i]))$score, nrow = binnum)))
         out_df_temp <- out_df_temp[,ncol(out_df_temp):1]
         out_df_temp <- cbind(HM = rep(HM_list[i], nrow(out_df_temp)), out_df_temp)
         out_df_temp <- cbind(gene = gene_ne_list, out_df_temp)
@@ -130,8 +108,8 @@ binning <- function(chrom) {
 }
 
 # parameters
-HM_list <- c("h3k4me3", "h3k4me1", "h3k9me3", "h3k36me3")
-chr_list <- c(1)
+HM_list <- c("h3k4me1", "h3k4me1", "h3k9me3", "h3k36me3")
+chr_list <- c(1:19, "X", "Y")
 data_path <- "/mnt/c/chipseq/test8"
 anno_path <- "/mnt/c/others/anno_mouse"
 output_path <- "/mnt/c/machinelearning/test3"
@@ -140,9 +118,10 @@ TSS_down <- 2000
 TTS_up <- 2000
 TTS_down <- 2000
 binsize <- 100
+binnum <- length(seq(-TSS_up, TSS_down, by = binsize)) -1 + length(seq(-TTS_up, TTS_down, by = binsize)) -1 + 1
 
 # procession
-cat("---------------processing---------------", "\n")
+cat("-------------processing--------------", "\n")
 cl <- makeForkCluster(2)
 out_df_list <- parLapply(cl, chr_list, binning)
 output <- Reduce("rbind", out_df_list)
