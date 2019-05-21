@@ -104,6 +104,7 @@ binning <- function(chrom) {
         out_df_temp <- cbind(gene = gene_ne_list, out_df_temp)
         out_df <- rbind(out_df, out_df_temp)
     }
+    
     return(out_df)
 }
 
